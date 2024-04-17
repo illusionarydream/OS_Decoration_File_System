@@ -164,10 +164,13 @@ int parseLine(char *line,
     token = strtok(line, " ");
     if (strcmp(token, "R") == 0 || strcmp(token, "W") == 0) {
         command_array[i++] = token;
+    } else if (strcmp(token, "I") == 0) {
+        command_array[i++] = token;
+        return 1;
     } else if (strcmp(token, "exit") == 0) {
         command_array[i++] = token;
         fprintf(stderr, "Exit the client\n");
-        return 1;
+        return 0;
     } else {
         fprintf(stderr, "Error: the command should be R(read) or W(write)\n");
         return -1;
@@ -223,18 +226,18 @@ int parseLine(char *line,
 int read_command_from_client(int client_sockfd,
                              char *buf) {
     int len = read(client_sockfd, buf, 1024);
-    if (len == -1 || len < 3) {
+    if (len < 2) {
         fprintf(stderr, "Error: cannot read the command from the client\n");
         return -1;
     }
     buf[len] = '\0';
     buf[len - 1] = '\0';  // remove the '\n' at the end of buf[len-1]
-    buf[len - 2] = '\0';  // remove the '\r' at the end of buf[len-2]
     printf("Received: %s\n", buf);
     return len;
 }
 
 // --------------------------------------------------------------------------------------------
+// Importantly, the following function is the key function in this snippet
 // Execution for one client in the child process
 // --------------------------------------------------------------------------------------------
 void Execution_for_one_client_in_child_process(int client_sockfd,
@@ -261,9 +264,16 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
             continue;
         }
         // handle exit
-        if (command_len == 1) {
+        if (command_len == 0) {
             close(client_sockfd);
             return;
+        }
+        // handle I
+        if (command_len == 1) {
+            char response[1024];
+            sprintf(response, "Cylinder number: %d\nSector number: %d\n", cylinder_num, sector_num);
+            write(client_sockfd, response, strlen(response));
+            continue;
         }
         // ?debug
         // for (int i = 0; i < command_len; i++) {
@@ -285,6 +295,7 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
                             s,
                             l);
             printf("Write: %s\n", command_array[4]);
+            write(client_sockfd, "Successfully write", 18);
         }
 
         // *read the disk file

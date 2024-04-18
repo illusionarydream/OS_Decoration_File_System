@@ -164,7 +164,11 @@ int parseLine(char *line,
 
     // first token should be read or write
     token = strtok(line, " ");
-    if (strcmp(token, "R") == 0 || strcmp(token, "W") == 0) {
+    printf("token: %s\n", token);
+    if (token == NULL) {
+        fprintf(stderr, "Error: the command should have at least one token\n");
+        return -1;
+    } else if (strcmp(token, "R") == 0 || strcmp(token, "W") == 0) {
         command_array[i++] = token;
     } else if (strcmp(token, "I") == 0) {
         command_array[i++] = token;
@@ -254,6 +258,7 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
         char buf[1024];
         int len = read_command_from_client(client_sockfd, buf);
         if (len == -1) {
+            write(client_sockfd, "Failed to read", 14);
             continue;
         }
 
@@ -263,6 +268,7 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
 
         // *Easy command handling and error handling
         if (command_len == -1) {
+            write(client_sockfd, "Failed to parse the command", 27);
             continue;
         }
         // handle exit
@@ -298,9 +304,11 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
                                        l);
             if (flag == 0) {
                 write(client_sockfd, "Failed to write", 15);
+                write(client_sockfd, "\nNo", 3);
                 continue;
             } else {
-                write(client_sockfd, "Successfully write", 18);
+                sprintf(buf, "Successfully write %d bytes\nYes", l);
+                write(client_sockfd, buf, strlen(buf));
             }
         }
 
@@ -319,8 +327,10 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
                                       s);
             if (flag == 0) {
                 write(client_sockfd, "Failed to read", 14);
+                write(client_sockfd, "\nNo", 3);
                 continue;
             } else {
+                write(client_sockfd, "Yes\n", 4);
                 write(client_sockfd, buf, block_size);
             }
         }

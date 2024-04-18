@@ -92,40 +92,42 @@ void make_mapping_file(int fd,
 // --------------------------------------------------------------------------------------------
 // Read the disk file
 // --------------------------------------------------------------------------------------------
-void read_disk_file(char *mapped_diskfile,
+int read_disk_file(char *mapped_diskfile,
+                   char *buf,
+                   int cylinder_num,
+                   int sector_num,
+                   int block_size,
+                   int File_Size,
+                   int c,
+                   int s) {
+    int offset = (c * sector_num + s) * block_size;
+    if (offset + block_size > File_Size || offset < 0) {
+        fprintf(stderr, "Error: the disk file is too small\n");
+        return 0;
+    }
+    memcpy(buf, mapped_diskfile + offset, block_size);
+    return 1;
+}
+
+// --------------------------------------------------------------------------------------------
+// Write the disk file
+// --------------------------------------------------------------------------------------------
+int write_disk_file(char *mapped_diskfile,
                     char *buf,
                     int cylinder_num,
                     int sector_num,
                     int block_size,
                     int File_Size,
                     int c,
-                    int s) {
+                    int s,
+                    int l) {
     int offset = (c * sector_num + s) * block_size;
-    if (offset + block_size > File_Size) {
+    if (offset + l > File_Size || offset < 0) {
         fprintf(stderr, "Error: the disk file is too small\n");
-        return;
-    }
-    memcpy(buf, mapped_diskfile + offset, block_size);
-}
-
-// --------------------------------------------------------------------------------------------
-// Write the disk file
-// --------------------------------------------------------------------------------------------
-void write_disk_file(char *mapped_diskfile,
-                     char *buf,
-                     int cylinder_num,
-                     int sector_num,
-                     int block_size,
-                     int File_Size,
-                     int c,
-                     int s,
-                     int l) {
-    int offset = (c * sector_num + s) * block_size;
-    if (offset + l > File_Size) {
-        fprintf(stderr, "Error: the disk file is too small\n");
-        return;
+        return 0;
     }
     memcpy(mapped_diskfile + offset, buf, l);
+    return 1;
 }
 
 // --------------------------------------------------------------------------------------------
@@ -285,17 +287,21 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
             int c = atoi(command_array[1]);
             int s = atoi(command_array[2]);
             int l = atoi(command_array[3]);
-            write_disk_file(mapped_diskfile,
-                            command_array[4],
-                            cylinder_num,
-                            sector_num,
-                            block_size,
-                            File_Size,
-                            c,
-                            s,
-                            l);
-            printf("Write: %s\n", command_array[4]);
-            write(client_sockfd, "Successfully write", 18);
+            int flag = write_disk_file(mapped_diskfile,
+                                       command_array[4],
+                                       cylinder_num,
+                                       sector_num,
+                                       block_size,
+                                       File_Size,
+                                       c,
+                                       s,
+                                       l);
+            if (flag == 0) {
+                write(client_sockfd, "Failed to write", 15);
+                continue;
+            } else {
+                write(client_sockfd, "Successfully write", 18);
+            }
         }
 
         // *read the disk file
@@ -303,16 +309,20 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
             int c = atoi(command_array[1]);
             int s = atoi(command_array[2]);
             char buf[1024];
-            read_disk_file(mapped_diskfile,
-                           buf,
-                           cylinder_num,
-                           sector_num,
-                           block_size,
-                           File_Size,
-                           c,
-                           s);
-            printf("Read: %s\n", buf);
-            write(client_sockfd, buf, block_size);
+            int flag = read_disk_file(mapped_diskfile,
+                                      buf,
+                                      cylinder_num,
+                                      sector_num,
+                                      block_size,
+                                      File_Size,
+                                      c,
+                                      s);
+            if (flag == 0) {
+                write(client_sockfd, "Failed to read", 14);
+                continue;
+            } else {
+                write(client_sockfd, buf, block_size);
+            }
         }
     }
 }

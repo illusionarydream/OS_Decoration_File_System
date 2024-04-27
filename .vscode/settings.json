@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "types.h": "c",
-        "thread": "c"
+        "thread": "c",
+        "unistd.h": "c"
     }
 }

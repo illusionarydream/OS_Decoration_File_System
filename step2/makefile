@@ -1,13 +1,22 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g
+LDFLAGS =
 
-all: program
+SRCS = main.c
+OBJS = $(SRCS:.c=.o)
+DEPS = inode.h directory.h file.h
 
-program: main.o
-	$(CC) $(CFLAGS) -o program main.o
+TARGET = myprogram
 
-main.o: main.c inode.h
-	$(CC) $(CFLAGS) -c main.c
+.PHONY: all clean
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) $(LDFLAGS) $^ -o $@
+
+%.o: %.c $(DEPS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f program main.o
+	rm -f $(OBJS) $(TARGET)

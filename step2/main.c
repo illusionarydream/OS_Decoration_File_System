@@ -1,4 +1,5 @@
 #include "inode.h"
+#include "file.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,45 +45,50 @@ void make_mapping_file(int fd,
 }
 int main() {
     int fd;
-    open_and_stretch_disk_file("disk", &fd, 1024 * 1024 * 16);
+    open_and_stretch_disk_file("disk", &fd, 1024 * 1024);
     char *mapped_diskfile;
-    make_mapping_file(fd, 1024 * 1024 * 16, &mapped_diskfile);
+    make_mapping_file(fd, 1024 * 1024, &mapped_diskfile);
 
     for (int i = 0; i < BLOCK_NUM; i++) {
         block_bitmap[i] = '0';
     }
 
-    struct Inode inode;
-    initial_inode(&inode, 0, -1, 1);
+    struct Inode root;
+    initial_inode(&root, 0, -1, 1);
     block_bitmap[0] = '1';
 
-    for (int i = 0; i < 10000; i++) {
-        int id;
-        init_new_block(mapped_diskfile, &inode, &id);
-    }
-
-    for (int i = 0; i < 10000; i++) {
-        printf("%d\n", inode.block_num);
-        remove_tail_block(mapped_diskfile, &inode);
-    }
-
-    for (int i = 0; i < 10000; i++) {
-        int id;
-        init_new_block(mapped_diskfile, &inode, &id);
-    }
-    for (int i = 0; i < 10000; i++) {
-        printf("%d\n", inode.block_num);
-        remove_tail_block(mapped_diskfile, &inode);
-    }
-
-    for (int i = 0; i < 10000; i++) {
-        int id;
-        init_new_block(mapped_diskfile, &inode, &id);
-    }
-    for (int i = 0; i < 10000; i++) {
-        int id;
-        get_sector_id(mapped_diskfile, &inode, i, &id);
-        printf("id: %d\n", id);
+    mk_f(mapped_diskfile, &root, "file1");
+    mk_f(mapped_diskfile, &root, "file2");
+    mk_f(mapped_diskfile, &root, "file3");
+    mk_dir(mapped_diskfile, &root, "dir1");
+    w_f(mapped_diskfile, &root, "file1", 10, "abcdefghij");
+    w_f(mapped_diskfile, &root, "file2", 10, "klmnopqrst");
+    w_f(mapped_diskfile, &root, "file3", 10, "uvwxyzABCD");
+    char output[256];
+    cat_f(mapped_diskfile, &root, "file1", output);
+    printf("%s\n", output);
+    cat_f(mapped_diskfile, &root, "file2", output);
+    printf("%s\n", output);
+    cat_f(mapped_diskfile, &root, "file3", output);
+    printf("%s\n", output);
+    char name[256][252];
+    ls(mapped_diskfile, &root, name);
+    // for (int i = 0; i < 4; i++) {
+    //     printf("%s\n", name[i]);
+    // }
+    change_to_subdir(mapped_diskfile, &root, "dir1");
+    mk_f(mapped_diskfile, &root, "file4");
+    mk_f(mapped_diskfile, &root, "file5");
+    mk_f(mapped_diskfile, &root, "file6");
+    mk_dir(mapped_diskfile, &root, "dir2");
+    change_to_subdir(mapped_diskfile, &root, "dir2");
+    mk_f(mapped_diskfile, &root, "file7");
+    w_f(mapped_diskfile, &root, "file7", 10, "1234567890");
+    cat_f(mapped_diskfile, &root, "file7", output);
+    cd(mapped_diskfile, &root, "../../dir1");
+    ls(mapped_diskfile, &root, name);
+    for (int i = 0; i < 4; i++) {
+        printf("%s\n", name[i]);
     }
     return 0;
 }

@@ -2,6 +2,8 @@
     "files.associations": {
         "types.h": "c",
         "thread": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "inode.h": "c",
+        "inet.h": "c"
     }
 }

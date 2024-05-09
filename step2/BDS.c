@@ -94,7 +94,6 @@ void make_mapping_file(int fd,
 // --------------------------------------------------------------------------------------------
 int read_disk_file(char *mapped_diskfile,
                    char *buf,
-                   int cylinder_num,
                    int sector_num,
                    int block_size,
                    int File_Size,
@@ -114,7 +113,6 @@ int read_disk_file(char *mapped_diskfile,
 // --------------------------------------------------------------------------------------------
 int write_disk_file(char *mapped_diskfile,
                     char *buf,
-                    int cylinder_num,
                     int sector_num,
                     int block_size,
                     int File_Size,
@@ -158,72 +156,23 @@ void create_server(int *sockfd,
 // Parse the command line
 // --------------------------------------------------------------------------------------------
 int parseLine(char *line,
-              char *command_array[]) {
-    int i = 0;
-    char *token;
-
-    // first token should be read or write
-    token = strtok(line, " ");
-    printf("token: %s\n", token);
-    if (token == NULL) {
-        fprintf(stderr, "Error: the command should have at least one token\n");
-        return -1;
-    } else if (strcmp(token, "R") == 0 || strcmp(token, "W") == 0) {
-        command_array[i++] = token;
-    } else if (strcmp(token, "I") == 0) {
-        command_array[i++] = token;
-        return 1;
-    } else if (strcmp(token, "exit") == 0) {
-        command_array[i++] = token;
-        fprintf(stderr, "Exit the client\n");
-        return 0;
-    } else {
-        fprintf(stderr, "Error: the command should be R(read) or W(write)\n");
-        return -1;
+              int *id,
+              char *data) {
+    // Read
+    if (line[0] == 'R') {
+        // the id
+        sscanf(line, "R %d ", id);
+        return 2;
     }
-
-    // second token should be an integer. Cylinder number or Sector number
-    token = strtok(NULL, " ");
-    if (token == NULL) {
-        fprintf(stderr, "Error: the command should have more than one token\n");
-        return -1;
-    }
-    command_array[i++] = token;
-
-    //  third token should be an integer. Sector number or Length
-    token = strtok(NULL, " ");
-    if (token == NULL) {
-        fprintf(stderr, "Error: the command should have more than two tokens\n");
-        return -1;
-    }
-    command_array[i++] = token;
-
-    // read only has three tokens
-    if (strcmp(command_array[0], "R") == 0) {
+    // Write
+    if (line[0] == 'W') {
+        // the id
+        sscanf(line, "W %d ", id);
+        // the data
+        memcpy(data, line + 256, 256);
         return 3;
     }
-
-    // the fourth token should be an integer. Length
-    token = strtok(NULL, " ");
-    if (token == NULL) {
-        fprintf(stderr, "Error: the command should have more than three tokens\n");
-        return -1;
-    }
-    command_array[i++] = token;
-    int length = atoi(token);  // sparse length
-
-    // the rest length should be the same as the length
-    token = strtok(NULL, " ");
-    char *rest = malloc(length + 1);
-    if (rest == NULL) {
-        fprintf(stderr, "Error: failed to allocate memory for command4\n");
-        return -1;
-    }
-    strncpy(rest, token, length);
-    rest[length] = '\0';
-    command_array[i++] = rest;
-
-    return i;
+    return -1;
 }
 
 // --------------------------------------------------------------------------------------------
@@ -231,108 +180,81 @@ int parseLine(char *line,
 // --------------------------------------------------------------------------------------------
 int read_command_from_client(int client_sockfd,
                              char *buf) {
-    int len = read(client_sockfd, buf, 1024);
-    if (len < 2) {
+    // * For this particular job, we read the command from the client for 512 bytes each time
+    int n = read(client_sockfd, buf, 512);
+    if (n < 0) {
         fprintf(stderr, "Error: cannot read the command from the client\n");
-        return -1;
+        return 0;
     }
-    buf[len] = '\0';
-    if (buf[len - 1] == '\n')
-        buf[len - 1] = '\0';
-    printf("Received: %s\n", buf);
-    return len;
+    printf("Received command: %s\n", buf);
+    for (int i = 0; i < 512; i++) {
+        printf("%d", (int)buf[i]);
+    }
+    printf("\n");
+    return 1;
 }
 
 // --------------------------------------------------------------------------------------------
 // Importantly, the following function is the key function in this snippet
 // Execution for one client in the child process
 // --------------------------------------------------------------------------------------------
-void Execution_for_one_client_in_child_process(int client_sockfd,
-                                               char *mapped_diskfile,
-                                               int cylinder_num,
-                                               int sector_num,
-                                               int block_size,
-                                               int File_Size,
-                                               int track_to_track_delay) {
+void Execution_for_one_client_in_child_process(
+    int client_sockfd,
+    char *mapped_diskfile,
+    int sector_num,
+    int block_size,
+    int File_Size,
+    int track_to_track_delay) {
+    // ?for the following code, we can see that it is the same as the code in the main function
+    // track_to_track_delay = 0;
     while (1) {
+        printf("Waiting for the command from the client\n");
         // *read the command from the client
-        char buf[1024];
-        int len = read_command_from_client(client_sockfd, buf);
-        if (len == -1) {
-            write(client_sockfd, "Failed to read", 14);
-            continue;
+        char buf[512];
+        if (!read_command_from_client(client_sockfd, buf)) {
+            break;
         }
 
         // *parse the command
-        char *command_array[1024];
-        int command_len = parseLine(buf, command_array);
+        int id;
+        char data[256];
+        int cmd_num = parseLine(buf, &id, data);
 
-        // *Easy command handling and error handling
-        if (command_len == -1) {
-            write(client_sockfd, "Failed to parse the command", 27);
-            continue;
-        }
-        // handle exit
-        if (command_len == 0) {
-            close(client_sockfd);
-            return;
-        }
-        // handle I
-        if (command_len == 1) {
-            char response[1024];
-            sprintf(response, "Cylinder number: %d\nSector number: %d\n", cylinder_num, sector_num);
-            write(client_sockfd, response, strlen(response));
-            continue;
-        }
         // ?debug
-        // for (int i = 0; i < command_len; i++) {
-        //     printf("command_array[%d]: %s\n", i, command_array[i]);
-        // }
+        // printf("cmd_num: %d\n", cmd_num);
+        // printf("id: %d\n", id);
 
-        // *write the disk file
-        if (strcmp(command_array[0], "W") == 0) {
-            int c = atoi(command_array[1]);
-            int s = atoi(command_array[2]);
-            int l = atoi(command_array[3]);
-            int flag = write_disk_file(mapped_diskfile,
-                                       command_array[4],
-                                       cylinder_num,
-                                       sector_num,
-                                       block_size,
-                                       File_Size,
-                                       c,
-                                       s,
-                                       l);
-            if (flag == 0) {
-                write(client_sockfd, "Failed to write", 15);
-                write(client_sockfd, "\nNo", 3);
-                continue;
-            } else {
-                sprintf(buf, "Successfully write %d bytes\nYes", l);
-                write(client_sockfd, buf, strlen(buf));
+        // *handle the read command
+        if (cmd_num == 2) {
+            int c = id / sector_num;
+            int s = id % sector_num;
+            char buffer[256];
+            if (!read_disk_file(mapped_diskfile,
+                                buffer,
+                                sector_num,
+                                block_size,
+                                File_Size,
+                                c,
+                                s)) {
+                break;
             }
+            write(client_sockfd, buffer, 256);
         }
 
-        // *read the disk file
-        else if (strcmp(command_array[0], "R") == 0) {
-            int c = atoi(command_array[1]);
-            int s = atoi(command_array[2]);
-            char buf[1024];
-            int flag = read_disk_file(mapped_diskfile,
-                                      buf,
-                                      cylinder_num,
-                                      sector_num,
-                                      block_size,
-                                      File_Size,
-                                      c,
-                                      s);
-            if (flag == 0) {
-                write(client_sockfd, "Failed to read", 14);
-                write(client_sockfd, "\nNo", 3);
-                continue;
-            } else {
-                write(client_sockfd, "Yes\n", 4);
-                write(client_sockfd, buf, block_size);
+        // *handle the write command
+        else if (cmd_num == 3) {
+            int c = id / sector_num;
+            int s = id % sector_num;
+            char *buffer = data;
+            if (!write_disk_file(mapped_diskfile,
+                                 buffer,
+                                 sector_num,
+                                 block_size,
+                                 File_Size,
+                                 c,
+                                 s,
+                                 256)) {
+                break;
             }
         }
     }
@@ -343,7 +265,6 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
 // --------------------------------------------------------------------------------------------
 void Execution_for_one_client(int client_sockfd,
                               char *mapped_diskfile,
-                              int cylinder_num,
                               int sector_num,
                               int block_size,
                               int File_Size,
@@ -361,7 +282,6 @@ void Execution_for_one_client(int client_sockfd,
         // *handle one client's commands in the child process
         Execution_for_one_client_in_child_process(client_sockfd,
                                                   mapped_diskfile,
-                                                  cylinder_num,
                                                   sector_num,
                                                   block_size,
                                                   File_Size,
@@ -382,7 +302,6 @@ void Execution_for_one_client(int client_sockfd,
 // Execute the client's commands
 // --------------------------------------------------------------------------------------------
 void interaction_between_server_and_clients(char *mapped_diskfile,
-                                            int cylinder_num,
                                             int sector_num,
                                             int block_size,
                                             int File_Size,
@@ -413,7 +332,6 @@ void interaction_between_server_and_clients(char *mapped_diskfile,
         // *execute the client's commands
         Execution_for_one_client(client_sockfd,
                                  mapped_diskfile,
-                                 cylinder_num,
                                  sector_num,
                                  block_size,
                                  File_Size,
@@ -459,7 +377,6 @@ int main(int argc, char *argv[]) {
 
     // *Execute the server and clients
     interaction_between_server_and_clients(mapped_diskfile,
-                                           cylinder_num,
                                            sector_num,
                                            block_size,
                                            FileSize,

@@ -7,7 +7,7 @@
 #include "disk_client.h"
 // block bitmap: '1' means the block is used, '0' means the block is free
 // global variable
-#define BLOCK_NUM 10000
+#define BLOCK_NUM 1024
 char block_bitmap[BLOCK_NUM];
 static int SOCKET_FD;
 // ---------------------------------
@@ -37,17 +37,6 @@ struct Inode {
     int indirect_block[10];        // indirect block
     int double_indirect_block[8];  // double indirect block
 };
-// ---------------------------------
-// find free block
-// ---------------------------------
-int find_free_block() {
-    for (int i = 0; i < BLOCK_NUM; i++) {
-        if (block_bitmap[i] == '0') {
-            return i;
-        }
-    }
-    return -1;
-}
 // ---------------------------------
 // write block data
 // ---------------------------------
@@ -88,17 +77,55 @@ void read_block(int sector_id, char* data) {
     }
     buffer[0] = 'R';
     sprintf(buffer + 2, "%d", sector_id);
-
     write_disk_client(SOCKET_FD, buffer);
     read_disk_client(SOCKET_FD, data);
+}
+// ---------------------------------
+// store the bitmap into the disk
+// ---------------------------------
+int store_bitmap() {
+    // write the bitmap to the disk
+    for (int i = 0; i < BLOCK_NUM; i += 256) {
+        char buffer[256];
+        memcpy(buffer, block_bitmap + i, 256);
+        write_block(i / 256, buffer);
+    }
+    return 0;
+}
+// ---------------------------------
+// load the bitmap from the disk
+// ---------------------------------
+int load_bitmap() {
+    // read the bitmap from the disk
+    for (int i = 0; i < BLOCK_NUM; i += 256) {
+        char buffer[256];
+        read_block(i / 256, buffer);
+        memcpy(block_bitmap + i, buffer, 256);
+    }
+    return 0;
+}
+
+// ---------------------------------
+// find free block
+// ---------------------------------
+int find_free_block() {
+    load_bitmap();  // read only
+    for (int i = 0; i < BLOCK_NUM; i++) {
+        if (block_bitmap[i] == '0') {
+            return i;
+        }
+    }
+    return -1;
 }
 // ---------------------------------
 // get the inode by its sector id
 // ---------------------------------
 int get_inode(int sector_id, struct Inode* inode) {
+    load_bitmap();  // read only
     if (sector_id < 0 || sector_id >= BLOCK_NUM || block_bitmap[sector_id] == '0') {
         return -1;
     }
+
     // read the inode data from the disk
     char inode_data[256];
     read_block(sector_id, inode_data);
@@ -134,6 +161,7 @@ int initial_inode(struct Inode* inode, uint32_t sector_id, uint32_t pre_inode_se
     for (int i = 0; i < 8; i++) {
         inode->double_indirect_block[i] = -1;
     }
+    write_inode_to_disk(inode);
     return 0;
 }
 // ---------------------------------
@@ -147,6 +175,7 @@ int init_new_inode(struct Inode* inode, int* sector_id, int pre_inode_sector_id,
     }
     // update the block bitmap
     block_bitmap[*sector_id] = '1';
+    store_bitmap();
     // write the inode data to the disk
     initial_inode(inode, *sector_id, pre_inode_sector_id, file_type);
     write_inode_to_disk(inode);
@@ -196,7 +225,7 @@ int get_sector_id(struct Inode* inode, int index, int* sector_id) {
 }
 // ---------------------------------
 // write inode data (256 bytes in one time)
-// input: disk, index, inode, inode_data
+// input: index, inode, inode_data
 // it can only write the data to the used block
 // ---------------------------------
 int write_inode(struct Inode* inode, int index, char* inode_data) {
@@ -211,7 +240,7 @@ int write_inode(struct Inode* inode, int index, char* inode_data) {
 }
 // ---------------------------------
 // read inode data (256 bytes in one time)
-// input: disk, index, inode
+// input: index, inode
 // output: inode_data
 // it can only read the data from the used block
 // ---------------------------------
@@ -219,6 +248,7 @@ int read_inode(struct Inode* inode, int index, char* inode_data) {
     // read the inode data from the disk
     int sector_id;
     int flag = get_sector_id(inode, index, &sector_id);
+    load_bitmap();
     if (flag == -1 || sector_id < 0 || block_bitmap[sector_id] == '0') {
         return -1;
     }
@@ -242,6 +272,7 @@ int init_new_block(struct Inode* inode, int* sector_id) {
     }
     // update the block bitmap
     block_bitmap[*sector_id] = '1';
+    store_bitmap();
     // write the sector id to the inode
     // if the index is in the direct block
     int index = inode->block_num - 1;
@@ -262,6 +293,7 @@ int init_new_block(struct Inode* inode, int* sector_id) {
                 return -1;
             }
             block_bitmap[inode->indirect_block[first_index]] = '1';
+            store_bitmap();
         }
         // write the sector id to the indirect block
         char indirect_data[256];
@@ -285,6 +317,7 @@ int init_new_block(struct Inode* inode, int* sector_id) {
                 return -1;
             }
             block_bitmap[inode->double_indirect_block[first_index]] = '1';
+            store_bitmap();
         }
         // if the indirect block is not initialized, we need to intialize it
         if (third_index == 0) {
@@ -296,6 +329,7 @@ int init_new_block(struct Inode* inode, int* sector_id) {
                 return -1;
             }
             block_bitmap[double_indirect_block[second_index]] = '1';
+            store_bitmap();
             write_block(inode->double_indirect_block[first_index], indirect_data);
         }
         // write the sector id to the indirect block
@@ -307,6 +341,7 @@ int init_new_block(struct Inode* inode, int* sector_id) {
         int* indirect_block = (int*)double_indirect_data;
         indirect_block[third_index] = *sector_id;
         write_block(double_indirect_block[second_index], double_indirect_data);
+        // write the inode data to the disk
         write_inode_to_disk(inode);
         return 0;
     }
@@ -324,6 +359,7 @@ int remove_tail_block(struct Inode* inode) {
     int index = inode->block_num - 1;
     if (index < 40) {
         block_bitmap[inode->direct_block[index]] = '0';
+        store_bitmap();
         inode->direct_block[index] = -1;
         inode->block_num--;
         write_inode_to_disk(inode);
@@ -338,12 +374,14 @@ int remove_tail_block(struct Inode* inode) {
         read_block(inode->indirect_block[first_index], indirect_data);
         int* indirect_block = (int*)indirect_data;
         block_bitmap[indirect_block[second_index]] = '0';
+        store_bitmap();
         indirect_block[second_index] = -1;
         write_block(inode->indirect_block[first_index], indirect_data);
         inode->block_num--;
         // remove the indirect block
         if (second_index == 0) {
             block_bitmap[inode->indirect_block[first_index]] = '0';
+            store_bitmap();
             inode->indirect_block[first_index] = -1;
         }
         write_inode_to_disk(inode);
@@ -366,18 +404,21 @@ int remove_tail_block(struct Inode* inode) {
         read_block(double_indirect_block[second_index], double_indirect_data);
         int* indirect_block = (int*)double_indirect_data;
         block_bitmap[indirect_block[third_index]] = '0';
+        store_bitmap();
         indirect_block[third_index] = -1;
         write_block(double_indirect_block[second_index], double_indirect_data);
         inode->block_num--;
         // remove the double indirect block
         if (third_index == 0) {
             block_bitmap[double_indirect_block[second_index]] = '0';
+            store_bitmap();
             double_indirect_block[second_index] = -1;
             write_block(inode->double_indirect_block[first_index], indirect_data);
         }
         // remove the indirect block
         if (second_index == 0 && third_index == 0) {
             block_bitmap[inode->double_indirect_block[first_index]] = '0';
+            store_bitmap();
             inode->double_indirect_block[first_index] = -1;
         }
         write_inode_to_disk(inode);

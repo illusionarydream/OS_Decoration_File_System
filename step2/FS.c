@@ -32,6 +32,10 @@ void init_bitmap() {
     for (i = 0; i < BLOCK_NUM; i++) {
         block_bitmap[i] = '0';
     }
+    for (i = 0; i < BLOCK_NUM / 256; i++) {
+        block_bitmap[i] = '1';
+    }
+    store_bitmap();
 }
 
 int main(int argc, char *argv[]) {
@@ -55,6 +59,8 @@ int main(int argc, char *argv[]) {
 
     // * initial the root directory
     create_root_directory(&ROOT);
+    create_public_directory(&ROOT);
+    root_sector_id = ROOT.sector_id;
 
     // * Initial the file server
     create_disk_server(FS_port);

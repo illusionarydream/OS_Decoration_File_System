@@ -41,8 +41,10 @@ int create_directory(struct Inode *inode, char *name) {
     // apply for a new inode
     int new_inode_id;
     struct Inode new_inode;
+
     init_new_inode(&new_inode, &new_inode_id, inode->sector_id, 1);
     // add the new inode to the directory
+
     add_name(inode, &new_inode, name, new_inode_id);
     return 0;
 }
@@ -58,6 +60,8 @@ int clear_file(struct Inode *inode) {
     int block_num = inode->block_num;
     for (int i = 0; i < block_num; i++)
         remove_tail_block(inode);
+    // update the inode
+    get_inode(inode->sector_id, inode);
     return 0;
 }
 // --------------------------------------------------------------------------------------------
@@ -129,6 +133,7 @@ int remove_file(struct Inode *inode, char *name) {
     remove_name(inode, name);
     // free the block
     block_bitmap[inode_id] = '0';
+    store_bitmap();
     return 0;
 }
 // --------------------------------------------------------------------------------------------
@@ -172,6 +177,7 @@ int remove_directory(struct Inode *inode, char *name) {
     remove_name(inode, name);
     // free the block
     block_bitmap[inode_id] = '0';
+    store_bitmap();
     return 0;
 }
 // --------------------------------------------------------------------------------------------
@@ -288,17 +294,24 @@ int cd(struct Inode *inode, char *path) {
     int token_num = 0;
     parse_cd(path, token, &token_num);
     write_inode_to_disk(inode);
+    // trace the path
+    struct Inode tmp_inode = *inode;
     for (int i = 0; i < token_num; i++) {
         if (strcmp(token[i], "..") == 0) {
-            if (change_to_parentdir(inode) == -1) {
+            if (change_to_parentdir(&tmp_inode) == -1) {
                 return -1;
             }
         } else if (strcmp(token[i], ".") == 0) {
             continue;
-        } else if (change_to_subdir(inode, token[i]) == -1) {
+        } else if (change_to_subdir(&tmp_inode, token[i]) == -1) {
             return -1;
         }
     }
+    // user cannot use cd to access the root directory
+    if (tmp_inode.pre_inode_sector_id == -1) {
+        return -1;
+    }
+    *inode = tmp_inode;
     return 0;
 }
 // --------------------------------------------------------------------------------------------
@@ -336,6 +349,10 @@ int d_f(struct Inode *parent_directory, char *name, int pos, int length) {
     }
     struct Inode inode;
     get_inode(inode_id, &inode);
+    // the length if larger than the file size
+    if (length > inode.file_size) {
+        length = inode.file_size - pos;
+    }
     // copy the data from the file to buffer
     int pre_length = inode.file_size;
     int new_length = inode.file_size - length;
@@ -355,8 +372,76 @@ int d_f(struct Inode *parent_directory, char *name, int pos, int length) {
 // --------------------------------------------------------------------------------------------
 int g_dir(struct Inode *parent_directory, char *content) {
     get_current_directory(parent_directory, content);
-    // ?debug
-    printf("current directory: %s\n", content);
+    return 0;
+}
+// *--------------------------------------------------------------------------------------------
+// * User information operation
+// *--------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------
+// Create the root directory
+// --------------------------------------------------------------------------------------------
+void create_root_directory(struct Inode *root) {
+    // *create the root directory
+    int sector_id;
+    init_new_inode(root, &sector_id, -1, 1);
+}
+// --------------------------------------------------------------------------------------------
+// Create the public directory
+// --------------------------------------------------------------------------------------------
+void create_public_directory(struct Inode *root) {
+    // *create the public directory
+    mk_dir(root, "public");
+}
+// --------------------------------------------------------------------------------------------
+// Create a new user
+// --------------------------------------------------------------------------------------------
+int create_user(struct Inode *root, char *name, char *password) {
+    // create the user directory
+    int flag = mk_dir(root, name);
+    if (flag == -1) {
+        return -1;
+    }
+
+    // create the user file
+    char user_info_name[256];
+
+    sprintf(user_info_name, "%s_%s", name, "user_info");
+    mk_f(root, user_info_name);
+
+    // write the password to the user file
+    w_f(root, user_info_name, strlen(password), password);
+
+    return 0;
+}
+// --------------------------------------------------------------------------------------------
+// Change the user
+// --------------------------------------------------------------------------------------------
+int change_user(struct Inode *root, struct Inode *user_inode, char *name, char *password) {
+    int inode_id;
+    // if the user want to access the public directory
+    if (strcmp(name, "public") == 0) {
+        find_name_id(root, name, &inode_id);
+        get_inode(inode_id, user_inode);
+        return 0;
+    }
+    // find the user directory
+    if (find_name_id(root, name, &inode_id) == -1) {
+        return -1;
+    }
+    get_inode(inode_id, user_inode);
+    // find the user file
+    char user_info_name[256];
+    sprintf(user_info_name, "%s_%s", name, "user_info");
+    if (find_name_id(root, user_info_name, &inode_id) == -1) {
+        return -1;
+    }
+    // read the password from the user file
+    char buffer[4096];
+    cat_f(root, user_info_name, buffer);
+    // check the password
+    if (strcmp(buffer, password) != 0) {
+        return -1;
+    }
     return 0;
 }
 #endif

@@ -34,7 +34,7 @@ int find_name_id(struct Inode* inode, char* name, int* inode_id) {
 }
 // ---------------------------------
 // add a new name to the directory
-// input: disk, inode, name, inode_id
+// input: inode, name, inode_id
 // ---------------------------------
 int add_name(struct Inode* inode, struct Inode* new_inode, char* name, int inode_id) {
     // if it is a file, return -1
@@ -56,11 +56,12 @@ int add_name(struct Inode* inode, struct Inode* new_inode, char* name, int inode
     write_block(new_block_id, (char*)&naming_block);
     new_inode->name_inode = new_block_id;
     write_inode_to_disk(new_inode);
+    write_inode_to_disk(inode);
     return 0;
 }
 // ---------------------------------
 // remove a name from the directory
-// input: disk, inode, name
+// input: inode, name
 // ---------------------------------
 int remove_name(struct Inode* inode, char* name) {
     // if it is a file, return -1
@@ -123,7 +124,6 @@ int get_current_directory(struct Inode* inode, char* name) {
         return -1;
     }
     while (tmp_inode.pre_inode_sector_id != -1) {
-        printf("tmp_inode.name_inode: %d\n", tmp_inode.name_inode);
         char tmp_name[256];
         struct Naming_block tmp_naming_block;
         read_block(tmp_inode.name_inode, tmp_name);

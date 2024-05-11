@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 struct Inode ROOT;
+int root_sector_id;
 
 // --------------------------------------------------------------------------------------------
 // Create the server to the port
@@ -185,7 +186,6 @@ int parseLine(char *line,
             return -1;
 
         token = strtok(NULL, "");
-        printf("token: %s\n", token);
         if (token == NULL)
             return -1;
         strncpy(command_array[i++], token, len);
@@ -223,6 +223,42 @@ int parseLine(char *line,
 
         return i;
     }
+
+    // adduser username password
+    // the password should not contain space
+    if (strcmp(token, "adduser") == 0) {
+        strcpy(command_array[i++], "adduser");
+
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
+
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
+
+        return i;
+    }
+
+    // su username password
+    // the password should not contain space
+    if (strcmp(token, "su") == 0) {
+        strcpy(command_array[i++], "su");
+
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
+
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
+
+        return i;
+    }
     return -1;
 }
 
@@ -243,13 +279,6 @@ int read_command_from_client(int client_sockfd,
 }
 
 // --------------------------------------------------------------------------------------------
-// Create the root directory
-// --------------------------------------------------------------------------------------------
-void create_root_directory(struct Inode *root) {
-    int sector_id;
-    init_new_inode(root, &sector_id, -1, 1);
-}
-// --------------------------------------------------------------------------------------------
 // get the current directory
 // --------------------------------------------------------------------------------------------
 void get_current_path(struct Inode *inode, char *name) {
@@ -265,9 +294,16 @@ void get_current_path(struct Inode *inode, char *name) {
 // Execution for one client in the child process
 // --------------------------------------------------------------------------------------------
 void Execution_for_one_client_in_child_process(int client_sockfd) {
+    // *initial the current directory in
+    get_inode(ROOT.sector_id, &ROOT);
     struct Inode cur_directory = ROOT;
+    cd(&cur_directory, "public");
+
     // *main loop
     while (1) {
+        // *store the bitmap
+        store_bitmap();
+
         // *print the current directory
         char cur_name[4096];
         bzero(cur_name, 4096);
@@ -285,6 +321,14 @@ void Execution_for_one_client_in_child_process(int client_sockfd) {
             continue;
         }
 
+        // *updata the bitmap
+        load_bitmap();
+
+        // *update the current directory information
+        int current_sector_id = cur_directory.sector_id;
+        get_inode(current_sector_id, &cur_directory);
+        get_inode(root_sector_id, &ROOT);
+
         // *parse the command
         char command_array[10][1024];
         int command_num = parseLine(buf, command_array);
@@ -297,10 +341,10 @@ void Execution_for_one_client_in_child_process(int client_sockfd) {
         }
 
         // ?debug
-        printf("command_num: %d\n", command_num);
-        for (int i = 0; i < command_num; i++) {
-            printf("command_array[%d]: %s\n", i, command_array[i]);
-        }
+        // printf("command_num: %d\n", command_num);
+        // for (int i = 0; i < command_num; i++) {
+        //     printf("command_array[%d]: %s\n", i, command_array[i]);
+        // }
 
         // *f
         if (strcmp(command_array[0], "f") == 0) {
@@ -308,6 +352,7 @@ void Execution_for_one_client_in_child_process(int client_sockfd) {
                 block_bitmap[i] = '0';
             }
             create_root_directory(&ROOT);
+            create_public_directory(&ROOT);
             cur_directory = ROOT;
             char output[1024];
             sprintf(output, "Successfully!\n");
@@ -464,6 +509,37 @@ void Execution_for_one_client_in_child_process(int client_sockfd) {
                 write(client_sockfd, output, 1024);
                 continue;
             }
+            sprintf(output, "Successfully!\n");
+            write(client_sockfd, output, 1024);
+        }
+
+        // *adduser username password
+        if (strcmp(command_array[0], "adduser") == 0) {
+            get_inode(ROOT.sector_id, &ROOT);
+            int flag = create_user(&ROOT, command_array[1], command_array[2]);
+            char output[1024];
+            if (flag == -1) {
+                sprintf(output, "Error: cannot add the user\n");
+                write(client_sockfd, output, 1024);
+                continue;
+            }
+            sprintf(output, "Successfully!\n");
+            write(client_sockfd, output, 1024);
+        }
+
+        // *su username password
+        if (strcmp(command_array[0], "su") == 0) {
+            get_inode(ROOT.sector_id, &ROOT);
+            struct Inode user_inode;
+            int flag = change_user(&ROOT, &user_inode, command_array[1], command_array[2]);
+            char output[1024];
+            if (flag == -1) {
+                sprintf(output, "Error: cannot switch the user\n");
+                write(client_sockfd, output, 1024);
+                continue;
+            }
+            write_inode_to_disk(&cur_directory);
+            cur_directory = user_inode;
             sprintf(output, "Successfully!\n");
             write(client_sockfd, output, 1024);
         }

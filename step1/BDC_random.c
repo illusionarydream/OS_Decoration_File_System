@@ -83,7 +83,7 @@ int read_from_server(int sockfd,
 // ------------------------------------------------
 // Randomly generate a command
 // ------------------------------------------------
-void generate_command(char *buffer,
+char generate_command(char *buffer,
                       int cylinder_num,
                       int sector_num) {
     // Generate a random number between 0 and 1
@@ -114,6 +114,7 @@ void generate_command(char *buffer,
 
         sprintf(buffer, "%c %d %d %d %s\n", random_R_or_W, random_c, random_s, constant_l, random_string);
     }
+    return random_R_or_W;
 }
 
 // ------------------------------------------------
@@ -126,6 +127,7 @@ void interact_with_server_for_N_times(int sockfd,
     // Information
     printf("Enter the command: I\n");
     write_to_server(sockfd, "I\n");
+    bzero(buffer, 1024);
     read_from_server(sockfd, buffer);
     printf("Information: %s\n", buffer);
 
@@ -135,9 +137,11 @@ void interact_with_server_for_N_times(int sockfd,
 
     // randomly send N massages to the server
     for (int i = 0; i < N; i++) {
+        usleep(1000 * 50);
         // Send the command to the server
-        generate_command(buffer, Cylinder_num, Sector_num);
-        printf("The %d random command: %s", i, buffer);
+        char ans = generate_command(buffer, Cylinder_num, Sector_num);
+        // printf("The %d random command: %s", i, buffer);
+        printf("%c\n", ans);
         write_to_server(sockfd, buffer);
 
         // Read the response from the server
@@ -145,7 +149,7 @@ void interact_with_server_for_N_times(int sockfd,
         read_from_server(sockfd, buffer);
 
         // Print the response
-        printf("Response: %s\n", buffer);
+        // printf("Response: %s\n", buffer);
     }
 }
 
@@ -170,6 +174,10 @@ void interact_with_server(int sockfd) {
 
         // * Sparse the number of the random commands
         sscanf(buffer, "%d", &N);
+        if (N > 1000 || N < 0) {
+            printf("The number of the random commands should be in the range of [0, 1000]\n");
+            continue;
+        }
 
         // * Interact with the server for N times
         interact_with_server_for_N_times(sockfd, N);

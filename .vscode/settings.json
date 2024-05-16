@@ -4,6 +4,7 @@
         "thread": "c",
         "unistd.h": "c",
         "inode.h": "c",
-        "inet.h": "c"
+        "inet.h": "c",
+        "stdlib.h": "c"
     }
 }

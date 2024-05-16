@@ -226,39 +226,39 @@ int parseLine(char *line,
 
     // adduser username password
     // the password should not contain space
-    // if (strcmp(token, "adduser") == 0) {
-    //     strcpy(command_array[i++], "adduser");
+    if (strcmp(token, "adduser") == 0) {
+        strcpy(command_array[i++], "adduser");
 
-    //     token = strtok(NULL, " ");
-    //     if (token == NULL)
-    //         return -1;
-    //     strcpy(command_array[i++], token);
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
 
-    //     token = strtok(NULL, " ");
-    //     if (token == NULL)
-    //         return -1;
-    //     strcpy(command_array[i++], token);
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
 
-    //     return i;
-    // }
+        return i;
+    }
 
     // su username password
     // the password should not contain space
-    // if (strcmp(token, "su") == 0) {
-    //     strcpy(command_array[i++], "su");
+    if (strcmp(token, "su") == 0) {
+        strcpy(command_array[i++], "su");
 
-    //     token = strtok(NULL, " ");
-    //     if (token == NULL)
-    //         return -1;
-    //     strcpy(command_array[i++], token);
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
 
-    //     token = strtok(NULL, " ");
-    //     if (token == NULL)
-    //         return -1;
-    //     strcpy(command_array[i++], token);
+        token = strtok(NULL, " ");
+        if (token == NULL)
+            return -1;
+        strcpy(command_array[i++], token);
 
-    //     return i;
-    // }
+        return i;
+    }
     return -1;
 }
 
@@ -311,7 +311,7 @@ void Execution_for_one_client_in_child_process(int client_sockfd) {
     // *initial the current directory in
     get_inode(ROOT.sector_id, &ROOT);
     struct Inode cur_directory = ROOT;
-    // cd(&cur_directory, "public");
+    cd(&cur_directory, "public");
 
     // *main loop
     while (1) {
@@ -375,10 +375,10 @@ void Execution_for_one_client_in_child_process(int client_sockfd) {
         if (strcmp(command_array[0], "f") == 0) {
             init_bitmap();
             create_root_directory(&ROOT);
-            // create_public_directory(&ROOT);+
+            create_public_directory(&ROOT);
             root_sector_id = ROOT.sector_id;
             cur_directory = ROOT;
-            // cd(&cur_directory, "public");
+            cd(&cur_directory, "public");
             char output[1024];
             bzero(output, 1024);
             sprintf(output, "Successfully!\n");
@@ -554,38 +554,38 @@ void Execution_for_one_client_in_child_process(int client_sockfd) {
             write(client_sockfd, output, 1024);
         }
 
-        // // *adduser username password
-        // if (strcmp(command_array[0], "adduser") == 0) {
-        //     get_inode(ROOT.sector_id, &ROOT);
-        //     int flag = create_user(&ROOT, command_array[1], command_array[2]);
-        //     char output[1024];
-        //     bzero(output, 1024);
-        //     if (flag == -1) {
-        //         sprintf(output, "Error: cannot add the user\n");
-        //         write(client_sockfd, output, 1024);
-        //         continue;
-        //     }
-        //     sprintf(output, "Successfully!\n");
-        //     write(client_sockfd, output, 1024);
-        // }
+        // *adduser username password
+        if (strcmp(command_array[0], "adduser") == 0) {
+            get_inode(ROOT.sector_id, &ROOT);
+            int flag = create_user(&ROOT, command_array[1], command_array[2]);
+            char output[1024];
+            bzero(output, 1024);
+            if (flag == -1) {
+                sprintf(output, "Error: cannot add the user\n");
+                write(client_sockfd, output, 1024);
+                continue;
+            }
+            sprintf(output, "Successfully!\n");
+            write(client_sockfd, output, 1024);
+        }
 
-        // // *su username password
-        // if (strcmp(command_array[0], "su") == 0) {
-        //     get_inode(ROOT.sector_id, &ROOT);
-        //     struct Inode user_inode;
-        //     int flag = change_user(&ROOT, &user_inode, command_array[1], command_array[2]);
-        //     char output[1024];
-        //     bzero(output, 1024);
-        //     if (flag == -1) {
-        //         sprintf(output, "Error: cannot switch the user\n");
-        //         write(client_sockfd, output, 1024);
-        //         continue;
-        //     }
-        //     write_inode_to_disk(&cur_directory);
-        //     cur_directory = user_inode;
-        //     sprintf(output, "Successfully!\n");
-        //     write(client_sockfd, output, 1024);
-        // }
+        // *su username password
+        if (strcmp(command_array[0], "su") == 0) {
+            get_inode(ROOT.sector_id, &ROOT);
+            struct Inode user_inode;
+            int flag = change_user(&ROOT, &user_inode, command_array[1], command_array[2]);
+            char output[1024];
+            bzero(output, 1024);
+            if (flag == -1) {
+                sprintf(output, "Error: cannot switch the user\n");
+                write(client_sockfd, output, 1024);
+                continue;
+            }
+            write_inode_to_disk(&cur_directory);
+            cur_directory = user_inode;
+            sprintf(output, "Successfully!\n");
+            write(client_sockfd, output, 1024);
+        }
     }
 }
 

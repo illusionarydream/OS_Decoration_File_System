@@ -98,8 +98,10 @@ int read_disk_file(char *mapped_diskfile,
                    int sector_num,
                    int block_size,
                    int File_Size,
+                   int track_to_track_delay,
                    int c,
                    int s) {
+    usleep(track_to_track_delay);
     int offset = (c * sector_num + s) * block_size;
     if (offset + block_size > File_Size || offset < 0) {
         fprintf(stderr, "Error: the disk file is too small\n");
@@ -118,9 +120,11 @@ int write_disk_file(char *mapped_diskfile,
                     int sector_num,
                     int block_size,
                     int File_Size,
+                    int track_to_track_delay,
                     int c,
                     int s,
                     int l) {
+    usleep(track_to_track_delay);
     int offset = (c * sector_num + s) * block_size;
     if (offset + l > File_Size || offset < 0) {
         fprintf(stderr, "Error: the disk file is too small\n");
@@ -280,6 +284,7 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
         // handle I
         if (command_len == 1) {
             char response[1024];
+            bzero(response, 1024);
             sprintf(response, "Cylinder number: %d\nSector number: %d\n", cylinder_num, sector_num);
             write(client_sockfd, response, strlen(response));
             continue;
@@ -300,16 +305,17 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
                                        sector_num,
                                        block_size,
                                        File_Size,
+                                       track_to_track_delay,
                                        c,
                                        s,
                                        l);
             if (flag == 0) {
-                write(client_sockfd, "Failed to write", 15);
-                write(client_sockfd, "\nNo", 3);
+                // write(client_sockfd, "Failed to write", 15);
+                write(client_sockfd, "No\n", 3);
                 continue;
             } else {
-                sprintf(buf, "Successfully write %d bytes\nYes", l);
-                write(client_sockfd, buf, strlen(buf));
+                // sprintf(buf, "Successfully write %d bytes\nYes", l);
+                write(client_sockfd, "Yes\n", 4);
             }
         }
 
@@ -324,11 +330,12 @@ void Execution_for_one_client_in_child_process(int client_sockfd,
                                       sector_num,
                                       block_size,
                                       File_Size,
+                                      track_to_track_delay,
                                       c,
                                       s);
             if (flag == 0) {
-                write(client_sockfd, "Failed to read", 14);
-                write(client_sockfd, "\nNo", 3);
+                // write(client_sockfd, "Failed to read", 14);
+                write(client_sockfd, "No\n", 3);
                 continue;
             } else {
                 write(client_sockfd, "Yes\n", 4);

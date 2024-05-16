@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
     // * initial the root directory
     create_root_directory(&ROOT);
-    // create_public_directory(&ROOT);
+    create_public_directory(&ROOT);
     root_sector_id = ROOT.sector_id;
 
     // * Initial the file server
